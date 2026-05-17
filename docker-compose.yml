@@ -1,0 +1,163 @@
+version: '3.9'
+
+services:
+
+  mysql:
+    image: mysql:8.0
+    container_name: mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: petclinic
+      MYSQL_USER: petclinic
+      MYSQL_PASSWORD: petclinic
+    ports:
+      - "3306:3306"
+    command: --default-authentication-plugin=mysql_native_password
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - petclinic-network
+
+  config-server:
+    build:
+      context: ./spring-petclinic-config-server
+      dockerfile: Dockerfile
+    container_name: config-server
+    ports:
+      - "8888:8888"
+    networks:
+      - petclinic-network
+
+  discovery-server:
+    build:
+      context: ./spring-petclinic-discovery-server
+      dockerfile: Dockerfile
+    container_name: discovery-server
+    ports:
+      - "8761:8761"
+    depends_on:
+      - config-server
+    networks:
+      - petclinic-network
+
+  customers-service:
+    build:
+      context: ./spring-petclinic-customers-service
+      dockerfile: Dockerfile
+    container_name: customers-service
+    ports:
+      - "8081:8081"
+    depends_on:
+      - mysql
+      - discovery-server
+    networks:
+      - petclinic-network
+
+  visits-service:
+    build:
+      context: ./spring-petclinic-visits-service
+      dockerfile: Dockerfile
+    container_name: visits-service
+    ports:
+      - "8082:8082"
+    depends_on:
+      - mysql
+      - discovery-server
+    networks:
+      - petclinic-network
+
+  vets-service:
+    build:
+      context: ./spring-petclinic-vets-service
+      dockerfile: Dockerfile
+    container_name: vets-service
+    ports:
+      - "8083:8083"
+    depends_on:
+      - mysql
+      - discovery-server
+    networks:
+      - petclinic-network
+
+  api-gateway:
+    build:
+      context: ./spring-petclinic-api-gateway
+      dockerfile: Dockerfile
+    container_name: api-gateway
+    ports:
+      - "8080:8080"
+    depends_on:
+      - discovery-server
+    networks:
+      - petclinic-network
+
+  admin-server:
+    build:
+      context: ./spring-petclinic-admin-server
+      dockerfile: Dockerfile
+    container_name: admin-server
+    ports:
+      - "9090:9090"
+    depends_on:
+      - discovery-server
+    networks:
+      - petclinic-network
+
+  tracing-server:
+    image: openzipkin/zipkin
+    container_name: zipkin
+    ports:
+      - "9411:9411"
+    networks:
+      - petclinic-network
+
+  jenkins:
+    image: jenkins/jenkins:lts-jdk17
+    container_name: jenkins
+    user: root
+    privileged: true
+    ports:
+      - "8088:8080"
+      - "50000:50000"
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - petclinic-network
+
+  sonarqube:
+    image: sonarqube:lts-community
+    container_name: sonarqube
+    ports:
+      - "9000:9000"
+    environment:
+      SONAR_ES_BOOTSTRAP_CHECKS_DISABLE: "true"
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_extensions:/opt/sonarqube/extensions
+      - sonarqube_logs:/opt/sonarqube/logs
+    networks:
+      - petclinic-network
+
+  nexus:
+    image: sonatype/nexus3
+    container_name: nexus
+    ports:
+      - "8085:8081"
+    volumes:
+      - nexus_data:/nexus-data
+    networks:
+      - petclinic-network
+
+volumes:
+  mysql_data:
+  jenkins_home:
+  sonarqube_data:
+  sonarqube_extensions:
+  sonarqube_logs:
+  nexus_data:
+
+networks:
+  petclinic-network:
+    driver: bridge
